@@ -237,11 +237,6 @@ int send_command (const vector<string> &cmd_line)
     return -1;
   }
 
-  else if( command == "account" ) {
-    FC_ASSERT( cmd_line.size() == 2 );
-    std::cout << fc::json::to_pretty_string( call( get_account_func,
-                                                   fc::mutable_variant_object( "name", cmd_line[1] ) ) ) << std::endl;
-  }
   else if( command == "push-trx" ) {
     auto trx_result = call (push_txn_func, fc::json::from_string( cmd_line[1]));
     std::cout << fc::json::to_pretty_string(trx_result) << std::endl;
@@ -276,22 +271,6 @@ int send_command (const vector<string> &cmd_line)
 
     std::cout << fc::json::to_pretty_string( push_transaction(trx)  ) << std::endl;
 
-  } else if( command == "transfer" ) {
-    FC_ASSERT( cmd_line.size() == 4 );
-
-    Name sender(cmd_line[1]);
-    Name recipient(cmd_line[2]);
-    uint64_t amount = fc::variant(cmd_line[3]).as_uint64();
-
-    SignedTransaction trx;
-    trx.scope = sort_names({sender,recipient});
-    trx.emplaceMessage(config::EosContractName, vector<types::AccountPermission>{{sender,"active"}}, "transfer",
-                       types::transfer{sender, recipient, amount});
-    auto info = get_info();
-    trx.expiration = info.head_block_time + 100; //chain.head_block_time() + 100;
-    trx.set_reference_block(info.head_block_id);
-
-    std::cout << fc::json::to_pretty_string( call( push_txn_func, trx )) << std::endl;
   } else if( command == "import" ) {
     if( cmd_line[1] == "key" ) {
       auto secret = wif_to_key( cmd_line[2] ); //fc::variant( cmd_line[2] ).as<fc::ecc::private_key_secret>();
@@ -342,10 +321,6 @@ int send_command (const vector<string> &cmd_line)
 int main( int argc, char** argv ) {
    CLI::App app{"Command Line Interface to Eos Daemon"};
    app.require_subcommand();
-
-   // Info subcommand
-   {
-   }
 
    // Create subcommand
    {
@@ -408,6 +383,29 @@ int main( int argc, char** argv ) {
                       << std::endl;
          });
       }
+   }
+
+   // Transfer subcommand
+   {
+      string sender;
+      string recipient;
+      uint64_t amount;
+      auto transfer = app.add_subcommand("transfer", "Transfer EOS from account to account", false);
+      transfer->add_option("sender", sender, "The account sending EOS")->required();
+      transfer->add_option("recipient", recipient, "The account receiving EOS")->required();
+      transfer->add_option("amount", amount, "The amount of EOS to send")->required();
+      transfer->set_callback([&] {
+         SignedTransaction trx;
+         trx.scope = sort_names({sender,recipient});
+         trx.emplaceMessage(config::EosContractName, vector<types::AccountPermission>{{sender,"active"}}, "transfer",
+                            types::transfer{sender, recipient, amount});
+         auto info = get_info();
+         trx.expiration = info.head_block_time + 100; //chain.head_block_time() + 100;
+         trx.set_reference_block(info.head_block_id);
+
+         std::cout << fc::json::to_pretty_string( call( push_txn_func, trx )) << std::endl;
+
+      });
    }
 
    // Exec subcommand
